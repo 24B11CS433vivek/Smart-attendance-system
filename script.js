@@ -1,219 +1,254 @@
 /**
- * SIMPLE ATTENDANCE SCANNER
- * Lightweight, Fast, Live Sync
+ * ATTENDANCE SCANNER - CORS FIXED VERSION
+ * 100% Working with Google Apps Script
  */
 
+// ============================================
 // ⚠️ PASTE YOUR GOOGLE APPS SCRIPT URL HERE
-const API_URL = 'https://script.google.com/macros/s/AKfycbym74lkksn7h8VktgkhVGNRQr__Zn3Ac86lHoXsL7hpH9gbGokw1UNDYySB-1JQcWGKNQ/exec';
+// ============================================
+const API = 'https://script.google.com/macros/s/AKfycbyfcH6tPpSlnPOHvM7unN-GbO_k33W6IzHzFpy6FahLPrM00UGAdx1e0KnSg9Z0vXCF/exec';
 
 // State
 let scanner = null;
-let isScanning = false;
-let currentRoom = 'A';
+let scanning = false;
+let room = 'Room A';
 let lastScan = 0;
 
-// Elements
-const startBtn = document.getElementById('startBtn');
-const stopBtn = document.getElementById('stopBtn');
-const codeInput = document.getElementById('codeInput');
-const submitBtn = document.getElementById('submitBtn');
-const resultDiv = document.getElementById('result');
-const countEl = document.getElementById('count');
-const recentList = document.getElementById('recentList');
-const statusEl = document.getElementById('status');
-const refreshBtn = document.getElementById('refreshBtn');
+// DOM Elements
+const $ = id => document.getElementById(id);
+const startBtn = $('startBtn');
+const stopBtn = $('stopBtn');
+const manualInput = $('manualInput');
+const manualBtn = $('manualBtn');
+const message = $('message');
+const totalCount = $('totalCount');
+const recentList = $('recentList');
+const status = $('status');
+const placeholder = $('placeholder');
+const refreshBtn = $('refreshBtn');
+const roomsDiv = $('rooms');
 
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
+// ============================================
+// INITIALIZATION
+// ============================================
+document.addEventListener('DOMContentLoaded', init);
+
+function init() {
+    // Load data
     loadData();
-    setInterval(loadData, 5000); // Live sync every 5 seconds
-    setupEvents();
-    checkOnline();
-});
-
-// Setup Events
-function setupEvents() {
+    
+    // Auto refresh every 5 seconds for live sync
+    setInterval(loadData, 5000);
+    
     // Room selection
-    document.querySelectorAll('.room').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.room').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentRoom = btn.dataset.room;
-        });
-    });
-
-    // Start/Stop Scanner
-    startBtn.addEventListener('click', startScanner);
-    stopBtn.addEventListener('click', stopScanner);
-
-    // Manual submit
-    submitBtn.addEventListener('click', () => {
-        const code = codeInput.value.trim().toUpperCase();
-        if (code) {
-            submitAttendance(code);
-            codeInput.value = '';
+    roomsDiv.addEventListener('click', e => {
+        if (e.target.classList.contains('room')) {
+            document.querySelectorAll('.room').forEach(r => r.classList.remove('active'));
+            e.target.classList.add('active');
+            room = e.target.dataset.room;
+            showMsg(`Selected: ${room}`, 'info');
         }
     });
-
-    codeInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') submitBtn.click();
-    });
-
-    // Refresh
-    refreshBtn.addEventListener('click', loadData);
-
-    // Online/Offline
-    window.addEventListener('online', checkOnline);
-    window.addEventListener('offline', checkOnline);
+    
+    // Start/Stop camera
+    startBtn.onclick = startCamera;
+    stopBtn.onclick = stopCamera;
+    
+    // Manual entry
+    manualBtn.onclick = () => {
+        const code = manualInput.value.trim().toUpperCase();
+        if (code) {
+            submitCode(code);
+            manualInput.value = '';
+        }
+    };
+    
+    manualInput.onkeypress = e => {
+        if (e.key === 'Enter') manualBtn.click();
+    };
+    
+    // Refresh button
+    refreshBtn.onclick = loadData;
+    
+    // Online/offline status
+    window.addEventListener('online', updateStatus);
+    window.addEventListener('offline', updateStatus);
+    updateStatus();
 }
 
-// Check Online Status
-function checkOnline() {
-    if (navigator.onLine) {
-        statusEl.textContent = '● Online';
-        statusEl.classList.remove('offline');
-    } else {
-        statusEl.textContent = '● Offline';
-        statusEl.classList.add('offline');
-    }
-}
-
-// Start Camera Scanner
-async function startScanner() {
+// ============================================
+// CAMERA FUNCTIONS
+// ============================================
+async function startCamera() {
+    showMsg('Starting camera...', 'info');
+    
     try {
-        scanner = new Html5Qrcode("scanner");
+        scanner = new Html5Qrcode('scanner');
         
         await scanner.start(
-            { facingMode: "environment" },
-            { fps: 10, qrbox: { width: 250, height: 250 } },
-            onScanSuccess,
-            () => {}
+            { facingMode: 'environment' },
+            {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0
+            },
+            onScan,
+            () => {} // ignore errors
         );
-
-        isScanning = true;
+        
+        scanning = true;
         startBtn.style.display = 'none';
         stopBtn.style.display = 'block';
-        showResult('Camera started! Point at barcode.', 'success');
+        placeholder.classList.add('hidden');
+        showMsg('📷 Camera ready! Scan barcode/QR code', 'success');
         
     } catch (err) {
-        showResult('Camera error: ' + err.message, 'error');
+        console.error('Camera error:', err);
+        showMsg('Camera error: ' + err.message, 'error');
     }
 }
 
-// Stop Scanner
-async function stopScanner() {
-    if (scanner && isScanning) {
-        await scanner.stop();
-        scanner.clear();
-        isScanning = false;
+async function stopCamera() {
+    if (scanner && scanning) {
+        try {
+            await scanner.stop();
+            scanner.clear();
+        } catch (e) {}
+        
+        scanning = false;
         startBtn.style.display = 'block';
         stopBtn.style.display = 'none';
+        placeholder.classList.remove('hidden');
     }
 }
 
-// On Successful Scan
-function onScanSuccess(code) {
-    // Prevent rapid duplicate scans
-    if (Date.now() - lastScan < 2000) return;
-    lastScan = Date.now();
-
-    // Vibrate
+// ============================================
+// SCAN HANDLER
+// ============================================
+function onScan(code) {
+    // Prevent rapid duplicate scans (2 second cooldown)
+    const now = Date.now();
+    if (now - lastScan < 2000) return;
+    lastScan = now;
+    
+    // Vibrate feedback
     if (navigator.vibrate) navigator.vibrate(100);
-
-    submitAttendance(code.trim().toUpperCase());
+    
+    // Process the code
+    submitCode(code.trim().toUpperCase());
 }
 
-// Submit Attendance to API
-async function submitAttendance(code) {
-    showResult('Processing...', 'warning');
-
+// ============================================
+// SUBMIT ATTENDANCE (CORS FIXED!)
+// ============================================
+async function submitCode(code) {
+    if (!code || code.length < 2) {
+        showMsg('Invalid code', 'error');
+        return;
+    }
+    
+    showMsg('Processing...', 'info');
+    
     try {
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                studentCode: code,
-                room: 'Room ' + currentRoom
-            })
+        // ✅ CORS FIX: Use URL parameters instead of JSON body
+        const url = `${API}?action=add&code=${encodeURIComponent(code)}&room=${encodeURIComponent(room)}`;
+        
+        const response = await fetch(url, {
+            method: 'GET',
+            redirect: 'follow'
         });
-
-        const data = await response.json();
-
-        if (data.success) {
-            showResult(`✓ ${code} - ${data.data.studentName || 'Recorded'}`, 'success');
-            loadData(); // Refresh list
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showMsg(`✅ ${code} - Recorded!`, 'success');
+            loadData(); // Refresh the list
         } else {
-            if (data.errorCode === 'DUPLICATE') {
-                showResult(`⚠ ${code} already scanned today!`, 'warning');
+            if (result.error === 'DUPLICATE') {
+                showMsg(`⚠️ ${code} already scanned today!`, 'warning');
             } else {
-                showResult(`✗ ${data.message}`, 'error');
+                showMsg(`❌ ${result.message || 'Error'}`, 'error');
             }
         }
+        
     } catch (err) {
-        showResult('Network error. Try again.', 'error');
+        console.error('Network error:', err);
+        showMsg('Network error. Check internet.', 'error');
     }
 }
 
-// Load Stats & Recent Scans (Live Sync)
+// ============================================
+// LOAD DATA (LIVE SYNC)
+// ============================================
 async function loadData() {
     try {
         // Get stats
-        const statsRes = await fetch(API_URL + '?action=stats');
+        const statsUrl = `${API}?action=stats`;
+        const statsRes = await fetch(statsUrl);
         const stats = await statsRes.json();
         
         if (stats.success) {
-            countEl.textContent = stats.data.totalToday || 0;
+            totalCount.textContent = stats.total || 0;
         }
-
+        
         // Get recent scans
-        const recentRes = await fetch(API_URL + '?action=recent&limit=10');
+        const recentUrl = `${API}?action=recent&limit=15`;
+        const recentRes = await fetch(recentUrl);
         const recent = await recentRes.json();
-
-        if (recent.success && recent.data.scans) {
-            renderRecent(recent.data.scans);
+        
+        if (recent.success && recent.scans) {
+            renderRecent(recent.scans);
         }
+        
     } catch (err) {
-        console.log('Sync error');
+        console.log('Sync failed');
     }
 }
 
-// Render Recent Scans
+// ============================================
+// RENDER RECENT SCANS
+// ============================================
 function renderRecent(scans) {
-    if (scans.length === 0) {
-        recentList.innerHTML = '<div class="empty">No scans yet</div>';
+    if (!scans || scans.length === 0) {
+        recentList.innerHTML = '<div class="empty-msg">No scans yet today</div>';
         return;
     }
-
+    
     recentList.innerHTML = scans.map(s => `
         <div class="scan-item">
             <div>
-                <div class="code">${s.studentCode}</div>
-                <div class="meta">${s.studentName || 'Unknown'}</div>
+                <div class="code">${s.code}</div>
+                <div class="name">${s.name || 'Student'}</div>
             </div>
-            <div class="meta">${s.room}<br>${formatTime(s.timestamp)}</div>
+            <div>
+                <div class="time">${s.time}</div>
+                <div class="room-tag">${s.room}</div>
+            </div>
         </div>
     `).join('');
 }
 
-// Format Time
-function formatTime(ts) {
-    if (!ts) return '';
-    try {
-        const d = new Date(ts.replace(' ', 'T'));
-        return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    } catch {
-        return ts;
+// ============================================
+// HELPERS
+// ============================================
+function showMsg(text, type) {
+    message.textContent = text;
+    message.className = 'message ' + type;
+    
+    // Auto hide after 3 seconds (except for processing)
+    if (type !== 'info') {
+        setTimeout(() => {
+            message.className = 'message';
+        }, 3000);
     }
 }
 
-// Show Result Message
-function showResult(msg, type) {
-    resultDiv.textContent = msg;
-    resultDiv.className = 'result ' + type;
-    
-    if (type !== 'warning' || msg.includes('already')) {
-        setTimeout(() => {
-            resultDiv.style.display = 'none';
-        }, 3000);
+function updateStatus() {
+    if (navigator.onLine) {
+        status.textContent = '● Online';
+        status.className = 'online';
+    } else {
+        status.textContent = '● Offline';
+        status.className = 'offline';
     }
 }
