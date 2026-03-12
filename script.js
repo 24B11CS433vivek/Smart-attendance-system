@@ -1,508 +1,836 @@
-/* ════════════════════════════════════════════════
-   AttendX — script.js
-   Full scanner logic, offline queue, dashboard
-   ════════════════════════════════════════════════ */
+/**
+ * ==========================================
+ * ATTENDANCE SCANNER - MAIN JAVASCRIPT
+ * Complete Scanner Logic & API Integration
+ * ==========================================
+ */
 
-// ──────────────────────────────────────────────
-//  CONFIG  (set your deployed Apps Script URL)
-// ──────────────────────────────────────────────
-const CONFIG_KEY = 'attendx_api_url';
-let API_URL = localStorage.getItem(CONFIG_KEY) || '';
+// ============================================
+// CONFIGURATION
+// ============================================
+const CONFIG = {
+    // Replace with your Google Apps Script Web App URL
+    API_URL: 'https://script.google.com/macros/s/AKfycbwYXx5ZoJdRmk1XmZKpjx5kk8QZZXvoeEYR_HAM7Ntwl0Ff-OGgAac9FHHLfv3noENZ8A/exec',
+    
+    // Scanner settings
+    SCAN_DELAY: 2000, // Delay between scans (ms)
+    AUTO_CLOSE_RESULT: 3000, // Auto close result modal (ms)
+    
+    // Local storage keys
+    STORAGE_KEYS: {
+        THEME: 'attendance_theme',
+        ROOM: 'attendance_room',
+        OFFLINE_QUEUE: 'attendance_offline_queue',
+        RECENT_SCANS: 'attendance_recent_scans'
+    },
+    
+    // Valid rooms
+    VALID_ROOMS: ['Room A', 'Room B', 'Room C', 'Room D', 'Room E', 'Room F', 'Room G', 'Room H', 'Room I', 'Room J']
+};
 
-// ──────────────────────────────────────────────
-//  STATE
-// ──────────────────────────────────────────────
-let html5QrCode   = null;
-let scanning      = false;
-let currentRoom   = 'Room 1';
-let scanCount     = 0;
-let offlineQueue  = JSON.parse(localStorage.getItem('attendx_queue') || '[]');
+// ============================================
+// STATE MANAGEMENT
+// ============================================
+const state = {
+    currentRoom: 'Room A',
+    isScanning: false,
+    isProcessing: false,
+    scanner: null,
+    currentCamera: 'environment',
+    offlineQueue: [],
+    recentScans: [],
+    stats: {
+        total: 0,
+        rooms: {}
+    },
+    lastScanTime: 0
+};
 
-// Today's scanned codes (for frontend duplicate prevention)
-const TODAY_KEY   = 'attendx_today_' + getTodayStr();
-let todayScanned  = new Set(JSON.parse(localStorage.getItem(TODAY_KEY) || '[]'));
+// ============================================
+// DOM ELEMENTS
+// ============================================
+const elements = {
+    // Theme
+    themeToggle: document.getElementById('themeToggle'),
+    
+    // Room selection
+    roomButtons: document.getElementById('roomButtons'),
+    moreRoomsBtn: document.getElementById('moreRoomsBtn'),
+    moreRoomsDropdown: document.getElementById('moreRoomsDropdown'),
+    
+    // Scanner
+    scannerContainer: document.getElementById('scannerContainer'),
+    reader: document.getElementById('reader'),
+    startBtn: document.getElementById('startBtn'),
+    stopBtn: document.getElementById('stopBtn'),
+    switchCameraBtn: document.getElementById('switchCameraBtn'),
+    flashBtn: document.getElementById('flashBtn'),
+    
+    // Manual entry
+    manualEntryToggle: document.getElementById('manualEntryToggle'),
+    manualEntryContent: document.getElementById('manualEntryContent'),
+    manualCode: document.getElementById('manualCode'),
+    manualSubmit: document.getElementById('manualSubmit'),
+    
+    // Result
+    resultSection: document.getElementById('resultSection'),
+    resultCard: document.getElementById('resultCard'),
+    closeResult: document.getElementById('closeResult'),
+    
+    // Stats
+    todayCount: document.getElementById('todayCount'),
+    
+    // Recent scans
+    recentScansList: document.getElementById('recentScansList'),
+    refreshRecent: document.getElementById('refreshRecent'),
+    
+    // Offline queue
+    offlineQueue: document.getElementById('offlineQueue'),
+    queueCount: document.getElementById('queueCount'),
+    retryQueue: document.getElementById('retryQueue'),
+    
+    // Connection status
+    connectionStatus: document.getElementById('connectionStatus'),
+    
+    // Loading
+    loadingOverlay: document.getElementById('loadingOverlay'),
+    
+    // Toast
+    toastContainer: document.getElementById('toastContainer'),
+    
+    // Audio
+    successSound: document.getElementById('successSound'),
+    errorSound: document.getElementById('errorSound'),
+    scanSound: document.getElementById('scanSound')
+};
 
-// ──────────────────────────────────────────────
-//  INIT
-// ──────────────────────────────────────────────
+// ============================================
+// INITIALIZATION
+// ============================================
 document.addEventListener('DOMContentLoaded', () => {
-  initBackground();
-  initRoomPills();
-  checkNetworkStatus();
-  updateScanCount();
-  restoreQueueBadge();
-
-  // Show config modal if no API URL set
-  if (!API_URL) {
-    setTimeout(() => openConfig(), 600);
-  }
-
-  // Retry offline queue every 30 seconds
-  setInterval(retryOfflineQueue, 30_000);
-  setInterval(checkNetworkStatus, 5_000);
+    initializeApp();
 });
 
-// ──────────────────────────────────────────────
-//  PAGES
-// ──────────────────────────────────────────────
-function showPage(id) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  if (id === 'page-dashboard') loadDashboard();
+function initializeApp() {
+    console.log('🚀 Initializing Attendance Scanner...');
+    
+    // Load saved preferences
+    loadTheme();
+    loadSavedRoom();
+    loadOfflineQueue();
+    
+    // Setup event listeners
+    setupEventListeners();
+    
+    // Check connection
+    updateConnectionStatus();
+    
+    // Load initial data
+    fetchStats();
+    fetchRecentScans();
+    
+    // Process offline queue if online
+    if (navigator.onLine) {
+        processOfflineQueue();
+    }
+    
+    console.log('✅ App initialized successfully');
 }
 
-// ──────────────────────────────────────────────
-//  ROOM PILLS
-// ──────────────────────────────────────────────
-function initRoomPills() {
-  document.querySelectorAll('.pill').forEach(pill => {
-    pill.addEventListener('click', () => {
-      document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
-      pill.classList.add('active');
-      currentRoom = pill.dataset.room;
+// ============================================
+// THEME MANAGEMENT
+// ============================================
+function loadTheme() {
+    const savedTheme = localStorage.getItem(CONFIG.STORAGE_KEYS.THEME) || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+}
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem(CONFIG.STORAGE_KEYS.THEME, newTheme);
+    updateThemeIcon(newTheme);
+}
+
+function updateThemeIcon(theme) {
+    const icon = elements.themeToggle.querySelector('i');
+    icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+}
+
+// ============================================
+// ROOM MANAGEMENT
+// ============================================
+function loadSavedRoom() {
+    const savedRoom = localStorage.getItem(CONFIG.STORAGE_KEYS.ROOM);
+    if (savedRoom && CONFIG.VALID_ROOMS.includes(savedRoom)) {
+        state.currentRoom = savedRoom;
+        updateRoomSelection(savedRoom);
+    }
+}
+
+function selectRoom(room) {
+    state.currentRoom = room;
+    localStorage.setItem(CONFIG.STORAGE_KEYS.ROOM, room);
+    updateRoomSelection(room);
+    
+    // Show feedback
+    showToast('info', 'Room Selected', `Now scanning for ${room}`);
+    
+    // Refresh recent scans for new room
+    fetchRecentScans();
+}
+
+function updateRoomSelection(room) {
+    // Update main room buttons
+    document.querySelectorAll('.room-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.room === room);
     });
-  });
+    
+    // Update dropdown buttons
+    document.querySelectorAll('.room-btn-small').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.room === room);
+    });
 }
 
-// ──────────────────────────────────────────────
-//  SCANNER TOGGLE
-// ──────────────────────────────────────────────
-async function toggleScanner() {
-  if (!API_URL) { openConfig(); return; }
-  scanning ? stopScanner() : startScanner();
-}
-
+// ============================================
+// SCANNER MANAGEMENT
+// ============================================
 async function startScanner() {
-  const btnText = document.getElementById('btn-text');
-  const btnStart = document.getElementById('btn-start');
-  const frame  = document.getElementById('scanner-frame');
-
-  btnText.textContent = 'Starting…';
-  btnStart.disabled = true;
-
-  try {
-    html5QrCode = new Html5Qrcode('reader');
-
-    const config = {
-      fps: 15,
-      qrbox: { width: 220, height: 220 },
-      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-      rememberLastUsedCamera: true,
-    };
-
-    await html5QrCode.start(
-      { facingMode: 'environment' },
-      config,
-      onScanSuccess,
-      onScanError
-    );
-
-    scanning = true;
-    frame.classList.add('active');
-    btnText.textContent = '⏹ STOP SCANNING';
-    btnStart.classList.add('scanning');
-    btnStart.disabled = false;
-
-  } catch (err) {
-    console.error('Camera error:', err);
-    showToast('error', '✕', 'Camera Error', err.message || 'Cannot access camera');
-    btnText.textContent = 'START SCANNING';
-    btnStart.disabled = false;
-  }
+    if (state.isScanning) return;
+    
+    try {
+        state.scanner = new Html5Qrcode("reader");
+        
+        const config = {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
+            disableFlip: false,
+            experimentalFeatures: {
+                useBarCodeDetectorIfSupported: true
+            }
+        };
+        
+        await state.scanner.start(
+            { facingMode: state.currentCamera },
+            config,
+            onScanSuccess,
+            onScanFailure
+        );
+        
+        state.isScanning = true;
+        updateScannerUI(true);
+        
+        console.log('📸 Scanner started');
+        
+    } catch (error) {
+        console.error('Failed to start scanner:', error);
+        showToast('error', 'Camera Error', 'Failed to access camera. Please check permissions.');
+    }
 }
 
 async function stopScanner() {
-  const btnText  = document.getElementById('btn-text');
-  const btnStart = document.getElementById('btn-start');
-  const frame    = document.getElementById('scanner-frame');
-
-  if (html5QrCode) {
-    try { await html5QrCode.stop(); } catch(e) {}
-    html5QrCode = null;
-  }
-  scanning = false;
-  frame.classList.remove('active');
-  btnText.textContent = 'START SCANNING';
-  btnStart.classList.remove('scanning');
-}
-
-// ──────────────────────────────────────────────
-//  SCAN CALLBACKS
-// ──────────────────────────────────────────────
-let lastScanned   = '';
-let scanCooldown  = false;  // prevents double-fire
-
-async function onScanSuccess(decodedText) {
-  const code = decodedText.trim().toUpperCase();
-
-  // Debounce: skip if same code within 2.5s
-  if (scanCooldown && code === lastScanned) return;
-  lastScanned  = code;
-  scanCooldown = true;
-  setTimeout(() => { scanCooldown = false; }, 2500);
-
-  playBeep();
-
-  // ── Frontend duplicate check ──
-  if (todayScanned.has(code)) {
-    flashOverlay('dup');
-    showToast('dup', '⚠', 'Already Scanned', `${code} marked earlier today`);
-    addToRecentList(code, currentRoom, getCurrentTime(), 'dup');
-    return;
-  }
-
-  // ── Optimistic UI update ──
-  todayScanned.add(code);
-  persistTodaySet();
-  scanCount++;
-  updateScanCount();
-  flashOverlay('success');
-  showToast('success', '✓', 'Marked Present', `${code} — ${currentRoom}`);
-  addToRecentList(code, currentRoom, getCurrentTime(), 'new');
-
-  // ── Send to backend ──
-  await submitAttendance(code, currentRoom);
-}
-
-function onScanError(err) {
-  // Silent — normal during scanning when no QR in frame
-}
-
-// ──────────────────────────────────────────────
-//  SUBMIT TO BACKEND
-// ──────────────────────────────────────────────
-async function submitAttendance(code, room) {
-  const payload = { code, room, timestamp: new Date().toISOString() };
-
-  if (!navigator.onLine) {
-    enqueueOffline(payload);
-    return;
-  }
-
-  try {
-    // Use no-cors mode with URL params as fallback
-    const url = API_URL
-      + "?code=" + encodeURIComponent(code)
-      + "&room=" + encodeURIComponent(room);
-
-    const res  = await fetch(url, { method: "GET" });
-    const data = await res.json();
-
-    if (data.status === "duplicate") {
-      showToast("dup", "⚠", "Duplicate (server)", code + " already in sheet");
-    }
-
-  } catch (err) {
-    console.warn("Network fail, queuing:", err);
-    enqueueOffline(payload);
-  }
-}
-
-// ──────────────────────────────────────────────
-//  OFFLINE QUEUE
-// ──────────────────────────────────────────────
-function enqueueOffline(payload) {
-  offlineQueue.push(payload);
-  localStorage.setItem('attendx_queue', JSON.stringify(offlineQueue));
-  restoreQueueBadge();
-}
-
-async function retryOfflineQueue() {
-  if (!navigator.onLine || offlineQueue.length === 0) return;
-
-  const toRetry = [...offlineQueue];
-  offlineQueue  = [];
-  localStorage.removeItem('attendx_queue');
-  restoreQueueBadge();
-
-  for (const payload of toRetry) {
+    if (!state.isScanning || !state.scanner) return;
+    
     try {
-      await fetch(API_URL, {
-        method:  'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body:    JSON.stringify(payload),
-      });
-    } catch (err) {
-      offlineQueue.push(payload); // re-queue on fail
+        await state.scanner.stop();
+        state.scanner.clear();
+        state.isScanning = false;
+        updateScannerUI(false);
+        
+        console.log('🛑 Scanner stopped');
+        
+    } catch (error) {
+        console.error('Failed to stop scanner:', error);
     }
-  }
-
-  if (offlineQueue.length > 0) {
-    localStorage.setItem('attendx_queue', JSON.stringify(offlineQueue));
-  }
-  restoreQueueBadge();
 }
 
-function restoreQueueBadge() {
-  const badge = document.getElementById('queue-badge');
-  if (offlineQueue.length > 0) {
-    badge.style.display = 'inline';
-    badge.textContent   = `● ${offlineQueue.length} pending`;
-  } else {
-    badge.style.display = 'none';
-  }
+async function switchCamera() {
+    if (!state.isScanning) return;
+    
+    state.currentCamera = state.currentCamera === 'environment' ? 'user' : 'environment';
+    
+    await stopScanner();
+    await startScanner();
+    
+    showToast('info', 'Camera Switched', state.currentCamera === 'environment' ? 'Using back camera' : 'Using front camera');
 }
 
-// ──────────────────────────────────────────────
-//  NETWORK STATUS
-// ──────────────────────────────────────────────
-function checkNetworkStatus() {
-  const dot = document.getElementById('net-status');
-  if (navigator.onLine) {
-    dot.className = 'status-dot online';
-    retryOfflineQueue();
-  } else {
-    dot.className = 'status-dot offline';
-  }
-}
-window.addEventListener('online',  checkNetworkStatus);
-window.addEventListener('offline', checkNetworkStatus);
-
-// ──────────────────────────────────────────────
-//  TOAST NOTIFICATION
-// ──────────────────────────────────────────────
-let toastTimer = null;
-function showToast(type, icon, title, detail) {
-  const toast  = document.getElementById('result-toast');
-  const iEl    = document.getElementById('toast-icon');
-  const tEl    = document.getElementById('toast-title');
-  const dEl    = document.getElementById('toast-detail');
-
-  toast.className = `result-toast toast-${type} show`;
-  iEl.textContent = icon;
-  tEl.textContent = title;
-  dEl.textContent = detail;
-
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
+function updateScannerUI(isScanning) {
+    elements.startBtn.classList.toggle('hidden', isScanning);
+    elements.stopBtn.classList.toggle('hidden', !isScanning);
+    elements.scannerContainer.classList.toggle('scanning', isScanning);
 }
 
-// ──────────────────────────────────────────────
-//  FLASH OVERLAY
-// ──────────────────────────────────────────────
-function flashOverlay(type) {
-  const el = document.getElementById('flash-overlay');
-  el.className = '';
-  void el.offsetWidth; // reflow
-  el.className = `flash-${type}`;
-  setTimeout(() => el.className = '', 400);
+// ============================================
+// SCAN HANDLERS
+// ============================================
+async function onScanSuccess(decodedText, decodedResult) {
+    // Prevent rapid duplicate scans
+    const now = Date.now();
+    if (now - state.lastScanTime < CONFIG.SCAN_DELAY) {
+        return;
+    }
+    state.lastScanTime = now;
+    
+    // Play scan sound
+    playSound('scan');
+    
+    // Vibrate if supported
+    if (navigator.vibrate) {
+        navigator.vibrate(100);
+    }
+    
+    console.log('📋 Scanned:', decodedText);
+    
+    // Process the scan
+    await processAttendance(decodedText.trim().toUpperCase());
 }
 
-// ──────────────────────────────────────────────
-//  RECENT SCANS LIST
-// ──────────────────────────────────────────────
-function addToRecentList(code, room, time, type) {
-  const list  = document.getElementById('scan-list');
-  const empty = list.querySelector('.scan-empty');
-  if (empty) empty.remove();
-
-  const li = document.createElement('li');
-  li.className = `scan-item ${type === 'dup' ? 'dup-item' : 'new-item'}`;
-  li.innerHTML = `
-    <span class="scan-dot"></span>
-    <span class="scan-code">${escHtml(code)}</span>
-    <span class="scan-room">${escHtml(room)}</span>
-    <span class="scan-time">${time}</span>
-  `;
-  list.insertBefore(li, list.firstChild);
-
-  // Cap at 30 items
-  while (list.children.length > 30) list.removeChild(list.lastChild);
+function onScanFailure(error) {
+    // Silent failure - no need to log every failed frame
 }
 
-// ──────────────────────────────────────────────
-//  SCAN COUNTER
-// ──────────────────────────────────────────────
-function updateScanCount() {
-  const el = document.getElementById('scan-count');
-  el.style.transform = 'scale(1.3)';
-  el.textContent = scanCount;
-  setTimeout(() => el.style.transform = 'scale(1)', 200);
+// ============================================
+// ATTENDANCE PROCESSING
+// ============================================
+async function processAttendance(studentCode) {
+    if (state.isProcessing) return;
+    
+    state.isProcessing = true;
+    showLoading(true);
+    
+    try {
+        // Validate input
+        if (!studentCode || studentCode.length < 2) {
+            throw new Error('Invalid student code');
+        }
+        
+        const payload = {
+            studentCode: studentCode,
+            room: state.currentRoom,
+            clientTimestamp: new Date().toISOString()
+        };
+        
+        // Check if online
+        if (!navigator.onLine) {
+            // Add to offline queue
+            addToOfflineQueue(payload);
+            showResult('warning', 'Queued Offline', 'Will sync when online', {
+                studentCode: studentCode,
+                room: state.currentRoom
+            });
+            return;
+        }
+        
+        // Send to API
+        const response = await fetch(CONFIG.API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Success
+            playSound('success');
+            elements.scannerContainer.classList.add('success');
+            setTimeout(() => elements.scannerContainer.classList.remove('success'), 500);
+            
+            showResult('success', 'Success!', result.message, result.data);
+            
+            // Update local recent scans
+            addToRecentScans(result.data);
+            
+            // Update stats
+            updateLocalStats(result.data);
+            
+        } else {
+            // Error or duplicate
+            playSound('error');
+            elements.scannerContainer.classList.add('error');
+            setTimeout(() => elements.scannerContainer.classList.remove('error'), 500);
+            
+            if (result.errorCode === 'DUPLICATE') {
+                showResult('warning', 'Already Scanned!', `Scanned at ${result.data.previousTime}`, result.data);
+            } else {
+                showResult('error', 'Error', result.message, result.data);
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error processing attendance:', error);
+        playSound('error');
+        
+        if (!navigator.onLine) {
+            // Add to offline queue
+            addToOfflineQueue({
+                studentCode: studentCode,
+                room: state.currentRoom,
+                clientTimestamp: new Date().toISOString()
+            });
+            showResult('warning', 'Queued Offline', 'Will sync when online', { studentCode });
+        } else {
+            showResult('error', 'Error', error.message || 'Failed to process attendance');
+        }
+        
+    } finally {
+        state.isProcessing = false;
+        showLoading(false);
+    }
 }
 
-// ──────────────────────────────────────────────
-//  DASHBOARD
-// ──────────────────────────────────────────────
-async function loadDashboard() {
-  if (!API_URL) { openConfig(); return; }
-
-  document.getElementById('dash-total').textContent = '—';
-  document.getElementById('dash-date').textContent  = 'Loading…';
-  document.getElementById('dash-tbody').innerHTML   = '<tr><td colspan="3" class="loading-cell">Loading…</td></tr>';
-
-  // Reset room cards
-  const cards = document.getElementById('room-cards');
-  cards.innerHTML = '';
-  ['Room 1','Room 2','Room 3','Room 4'].forEach(() => {
-    const d = document.createElement('div');
-    d.className = 'room-card skeleton';
-    cards.appendChild(d);
-  });
-
-  try {
-    const res  = await fetch(`${API_URL}?action=stats`);
-    const data = await res.json();
-    if (data.status !== 'ok') throw new Error(data.message);
-
-    renderDashboard(data);
-  } catch (err) {
-    document.getElementById('dash-total').textContent = 'ERR';
-    document.getElementById('dash-date').textContent  = 'Failed to load';
-    console.error(err);
-  }
+// ============================================
+// RESULT DISPLAY
+// ============================================
+function showResult(type, title, message, data = {}) {
+    elements.resultCard.className = `result-card ${type}`;
+    
+    // Update icon
+    const iconMap = {
+        success: 'fas fa-check-circle',
+        error: 'fas fa-times-circle',
+        warning: 'fas fa-exclamation-circle'
+    };
+    elements.resultCard.querySelector('.result-icon i').className = iconMap[type] || iconMap.error;
+    
+    // Update content
+    elements.resultCard.querySelector('.result-title').textContent = title;
+    elements.resultCard.querySelector('.result-message').textContent = message;
+    
+    // Update details
+    const details = elements.resultCard.querySelector('.result-details');
+    details.querySelector('.student-code').textContent = data.studentCode || '';
+    details.querySelector('.student-name').textContent = data.studentName || '';
+    details.querySelector('.scan-time').textContent = data.timestamp || data.previousTime || new Date().toLocaleTimeString();
+    
+    // Show modal
+    elements.resultSection.classList.remove('hidden');
+    
+    // Auto close after delay
+    setTimeout(() => {
+        hideResult();
+    }, CONFIG.AUTO_CLOSE_RESULT);
 }
 
-function renderDashboard(data) {
-  // Date
-  document.getElementById('dash-date').textContent = data.date || getTodayStr();
-
-  // Total
-  const total = data.total || 0;
-  document.getElementById('dash-total').textContent = total;
-
-  // Progress bar
-  const pct = Math.min((total / 400) * 100, 100).toFixed(1);
-  document.getElementById('dash-progress').style.width = pct + '%';
-
-  // Room cards
-  const cards  = document.getElementById('room-cards');
-  cards.innerHTML = '';
-  const rooms  = ['Room 1','Room 2','Room 3','Room 4'];
-  const maxRm  = Math.max(...rooms.map(r => data.roomCounts[r] || 0), 1);
-
-  rooms.forEach(room => {
-    const count  = data.roomCounts[room] || 0;
-    const fillPct = ((count / maxRm) * 100).toFixed(1);
-    const card    = document.createElement('div');
-    card.className = 'room-card';
-    card.innerHTML = `
-      <div class="room-card-name">${room}</div>
-      <div class="room-card-count">${count}</div>
-      <div class="room-card-bar"><div class="room-card-fill" style="width:${fillPct}%"></div></div>
-    `;
-    cards.appendChild(card);
-  });
-
-  // Recent table
-  const tbody = document.getElementById('dash-tbody');
-  tbody.innerHTML = '';
-  if (!data.recent || data.recent.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" class="loading-cell">No scans yet</td></tr>';
-    return;
-  }
-  data.recent.forEach(row => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><strong>${escHtml(row.code)}</strong></td>
-      <td>${escHtml(row.room)}</td>
-      <td>${escHtml(row.time)}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+function hideResult() {
+    elements.resultSection.classList.add('hidden');
 }
 
-// ──────────────────────────────────────────────
-//  CONFIG MODAL
-// ──────────────────────────────────────────────
-function openConfig() {
-  const modal = document.getElementById('config-modal');
-  document.getElementById('api-url-input').value = API_URL;
-  modal.classList.add('open');
-}
-function closeConfig() {
-  document.getElementById('config-modal').classList.remove('open');
-}
-function saveConfig() {
-  const val = document.getElementById('api-url-input').value.trim();
-  if (!val.startsWith('https://')) {
-    alert('Please paste a valid https:// URL');
-    return;
-  }
-  API_URL = val;
-  localStorage.setItem(CONFIG_KEY, API_URL);
-  closeConfig();
-  showToast('success', '✓', 'API Saved', 'Ready to scan');
+// ============================================
+// RECENT SCANS MANAGEMENT
+// ============================================
+function addToRecentScans(scanData) {
+    // Add to beginning of array
+    state.recentScans.unshift(scanData);
+    
+    // Keep only last 20
+    if (state.recentScans.length > 20) {
+        state.recentScans = state.recentScans.slice(0, 20);
+    }
+    
+    // Save to local storage
+    localStorage.setItem(CONFIG.STORAGE_KEYS.RECENT_SCANS, JSON.stringify(state.recentScans));
+    
+    // Update UI
+    renderRecentScans();
 }
 
-// ──────────────────────────────────────────────
-//  SOUND  (Web Audio API — no external files)
-// ──────────────────────────────────────────────
-let audioCtx = null;
-function playBeep() {
-  try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc  = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.type      = 'sine';
-    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-    gain.gain.setValueAtTime(.4, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(.001, audioCtx.currentTime + .18);
-    osc.start();
-    osc.stop(audioCtx.currentTime + .18);
-  } catch(e) {}
+function renderRecentScans() {
+    if (state.recentScans.length === 0) {
+        elements.recentScansList.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-inbox"></i>
+                <p>No scans yet today</p>
+            </div>
+        `;
+        return;
+    }
+    
+    elements.recentScansList.innerHTML = state.recentScans.map((scan, index) => `
+        <div class="scan-item" style="animation-delay: ${index * 0.05}s">
+            <div class="scan-item-icon">${(scan.studentCode || '??')[0]}</div>
+            <div class="scan-item-details">
+                <div class="scan-item-code">${scan.studentCode || 'Unknown'}</div>
+                <div class="scan-item-name">${scan.studentName || 'Unknown Student'}</div>
+            </div>
+            <div class="scan-item-time">
+                ${formatTime(scan.timestamp)}
+                <div class="scan-item-room">${scan.room || 'N/A'}</div>
+            </div>
+        </div>
+    `).join('');
 }
 
-// ──────────────────────────────────────────────
-//  BACKGROUND ANIMATION (grid dots)
-// ──────────────────────────────────────────────
-function initBackground() {
-  const canvas = document.getElementById('bg-canvas');
-  const ctx    = canvas.getContext('2d');
+async function fetchRecentScans() {
+    try {
+        elements.refreshRecent.classList.add('loading');
+        
+        const response = await fetch(`${CONFIG.API_URL}?action=recent&room=${encodeURIComponent(state.currentRoom)}&limit=20`);
+        const result = await response.json();
+        
+        if (result.success && result.data.scans) {
+            state.recentScans = result.data.scans;
+            renderRecentScans();
+        }
+        
+    } catch (error) {
+        console.error('Failed to fetch recent scans:', error);
+        // Load from local storage
+        const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.RECENT_SCANS);
+        if (saved) {
+            state.recentScans = JSON.parse(saved);
+            renderRecentScans();
+        }
+    } finally {
+        elements.refreshRecent.classList.remove('loading');
+    }
+}
 
-  function resize() {
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
-  }
-  resize();
-  window.addEventListener('resize', resize);
+// ============================================
+// STATISTICS
+// ============================================
+async function fetchStats() {
+    try {
+        const response = await fetch(`${CONFIG.API_URL}?action=stats`);
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+            state.stats = result.data;
+            updateStatsUI();
+        }
+        
+    } catch (error) {
+        console.error('Failed to fetch stats:', error);
+    }
+}
 
-  const dots = [];
-  const N    = 60;
-  for (let i = 0; i < N; i++) {
-    dots.push({
-      x:  Math.random() * window.innerWidth,
-      y:  Math.random() * window.innerHeight,
-      r:  Math.random() * 1.5 + .5,
-      vx: (Math.random() - .5) * .3,
-      vy: (Math.random() - .5) * .3,
-      a:  Math.random(),
+function updateLocalStats(scanData) {
+    state.stats.totalToday = (state.stats.totalToday || 0) + 1;
+    
+    const room = scanData.room;
+    if (!state.stats.roomCounts) {
+        state.stats.roomCounts = {};
+    }
+    state.stats.roomCounts[room] = (state.stats.roomCounts[room] || 0) + 1;
+    
+    updateStatsUI();
+}
+
+function updateStatsUI() {
+    // Update header badge
+    const totalSpan = elements.todayCount.querySelector('span');
+    totalSpan.textContent = state.stats.totalToday || 0;
+    
+    // Update room counts
+    document.querySelectorAll('.room-btn').forEach(btn => {
+        const room = btn.dataset.room;
+        const count = state.stats.roomCounts?.[room] || 0;
+        const countSpan = btn.querySelector('.room-count');
+        if (countSpan) {
+            countSpan.textContent = count;
+        }
     });
-  }
+}
 
-  function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    dots.forEach(d => {
-      d.x += d.vx; d.y += d.vy;
-      if (d.x < 0) d.x = canvas.width;
-      if (d.x > canvas.width) d.x = 0;
-      if (d.y < 0) d.y = canvas.height;
-      if (d.y > canvas.height) d.y = 0;
-      ctx.beginPath();
-      ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(0,229,255,${d.a * .3})`;
-      ctx.fill();
+// ============================================
+// OFFLINE QUEUE MANAGEMENT
+// ============================================
+function loadOfflineQueue() {
+    const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.OFFLINE_QUEUE);
+    if (saved) {
+        state.offlineQueue = JSON.parse(saved);
+        updateOfflineQueueUI();
+    }
+}
+
+function saveOfflineQueue() {
+    localStorage.setItem(CONFIG.STORAGE_KEYS.OFFLINE_QUEUE, JSON.stringify(state.offlineQueue));
+    updateOfflineQueueUI();
+}
+
+function addToOfflineQueue(data) {
+    state.offlineQueue.push({
+        ...data,
+        queuedAt: new Date().toISOString()
     });
-    requestAnimationFrame(draw);
-  }
-  draw();
+    saveOfflineQueue();
+    showToast('warning', 'Added to Queue', 'Will sync when online');
 }
 
-// ──────────────────────────────────────────────
-//  HELPERS
-// ──────────────────────────────────────────────
-function getTodayStr() {
-  return new Date().toISOString().slice(0, 10);
+function updateOfflineQueueUI() {
+    const hasQueue = state.offlineQueue.length > 0;
+    elements.offlineQueue.classList.toggle('hidden', !hasQueue);
+    elements.queueCount.textContent = state.offlineQueue.length;
 }
-function getCurrentTime() {
-  return new Date().toLocaleTimeString('en-IN', { hour12: false });
+
+async function processOfflineQueue() {
+    if (state.offlineQueue.length === 0) return;
+    
+    showToast('info', 'Syncing...', `Processing ${state.offlineQueue.length} queued scans`);
+    
+    const queue = [...state.offlineQueue];
+    state.offlineQueue = [];
+    
+    let successCount = 0;
+    let failedQueue = [];
+    
+    for (const item of queue) {
+        try {
+            const response = await fetch(CONFIG.API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(item)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                successCount++;
+                addToRecentScans(result.data);
+            } else if (result.errorCode !== 'DUPLICATE') {
+                failedQueue.push(item);
+            }
+            
+        } catch (error) {
+            failedQueue.push(item);
+        }
+    }
+    
+    state.offlineQueue = failedQueue;
+    saveOfflineQueue();
+    
+    if (successCount > 0) {
+        showToast('success', 'Sync Complete', `${successCount} scans synced successfully`);
+        fetchStats();
+    }
+    
+    if (failedQueue.length > 0) {
+        showToast('warning', 'Sync Incomplete', `${failedQueue.length} scans still pending`);
+    }
 }
-function persistTodaySet() {
-  localStorage.setItem(TODAY_KEY, JSON.stringify([...todayScanned]));
+
+// ============================================
+// CONNECTION STATUS
+// ============================================
+function updateConnectionStatus() {
+    const isOnline = navigator.onLine;
+    const statusEl = elements.connectionStatus;
+    
+    statusEl.className = `connection-status ${isOnline ? 'online' : 'offline'}`;
+    statusEl.querySelector('span').textContent = isOnline ? 'Online' : 'Offline';
 }
-function escHtml(str) {
-  return String(str)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+// ============================================
+// MANUAL ENTRY
+// ============================================
+function toggleManualEntry() {
+    const isActive = elements.manualEntryToggle.classList.toggle('active');
+    elements.manualEntryContent.classList.toggle('show', isActive);
+    
+    if (isActive) {
+        elements.manualCode.focus();
+    }
 }
+
+async function submitManualEntry() {
+    const code = elements.manualCode.value.trim().toUpperCase();
+    
+    if (!code) {
+        showToast('error', 'Error', 'Please enter a student code');
+        return;
+    }
+    
+    await processAttendance(code);
+    elements.manualCode.value = '';
+}
+
+// ============================================
+// UTILITY FUNCTIONS
+// ============================================
+function showLoading(show) {
+    elements.loadingOverlay.classList.toggle('hidden', !show);
+}
+
+function showToast(type, title, message) {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    const iconMap = {
+        success: 'fas fa-check-circle',
+        error: 'fas fa-times-circle',
+        warning: 'fas fa-exclamation-triangle',
+        info: 'fas fa-info-circle'
+    };
+    
+    toast.innerHTML = `
+        <div class="toast-icon">
+            <i class="${iconMap[type] || iconMap.info}"></i>
+        </div>
+        <div class="toast-content">
+            <div class="toast-title">${title}</div>
+            <div class="toast-message">${message}</div>
+        </div>
+    `;
+    
+    elements.toastContainer.appendChild(toast);
+    
+    // Remove after delay
+    setTimeout(() => {
+        toast.classList.add('hiding');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+function playSound(type) {
+    try {
+        const sounds = {
+            success: elements.successSound,
+            error: elements.errorSound,
+            scan: elements.scanSound
+        };
+        
+        const sound = sounds[type];
+        if (sound) {
+            sound.currentTime = 0;
+            sound.play().catch(() => {}); // Ignore autoplay errors
+        }
+    } catch (e) {
+        // Ignore audio errors
+    }
+}
+
+function formatTime(timestamp) {
+    if (!timestamp) return '';
+    
+    try {
+        // Handle different timestamp formats
+        let date;
+        if (typeof timestamp === 'string') {
+            // Try parsing as ISO or common formats
+            if (timestamp.includes('T')) {
+                date = new Date(timestamp);
+            } else {
+                // Assume format like "2025-01-15 09:30:45"
+                date = new Date(timestamp.replace(' ', 'T'));
+            }
+        } else {
+            date = new Date(timestamp);
+        }
+        
+        return date.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+    } catch (e) {
+        return timestamp;
+    }
+}
+
+// ============================================
+// EVENT LISTENERS
+// ============================================
+function setupEventListeners() {
+    // Theme toggle
+    elements.themeToggle.addEventListener('click', toggleTheme);
+    
+    // Room selection
+    elements.roomButtons.addEventListener('click', (e) => {
+        const btn = e.target.closest('.room-btn');
+        if (btn) {
+            selectRoom(btn.dataset.room);
+        }
+    });
+    
+    // More rooms dropdown
+    elements.moreRoomsBtn.addEventListener('click', () => {
+        elements.moreRoomsDropdown.classList.toggle('show');
+    });
+    
+    elements.moreRoomsDropdown.addEventListener('click', (e) => {
+        const btn = e.target.closest('.room-btn-small');
+        if (btn) {
+            selectRoom(btn.dataset.room);
+            elements.moreRoomsDropdown.classList.remove('show');
+        }
+    });
+    
+    // Scanner controls
+    elements.startBtn.addEventListener('click', startScanner);
+    elements.stopBtn.addEventListener('click', stopScanner);
+    elements.switchCameraBtn.addEventListener('click', switchCamera);
+    
+    // Manual entry
+    elements.manualEntryToggle.addEventListener('click', toggleManualEntry);
+    elements.manualSubmit.addEventListener('click', submitManualEntry);
+    elements.manualCode.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            submitManualEntry();
+        }
+    });
+    
+    // Result modal
+    elements.closeResult.addEventListener('click', hideResult);
+    elements.resultSection.addEventListener('click', (e) => {
+        if (e.target === elements.resultSection) {
+            hideResult();
+        }
+    });
+    
+    // Recent scans refresh
+    elements.refreshRecent.addEventListener('click', () => {
+        fetchRecentScans();
+        fetchStats();
+    });
+    
+    // Offline queue retry
+    elements.retryQueue.addEventListener('click', processOfflineQueue);
+    
+    // Connection status
+    window.addEventListener('online', () => {
+        updateConnectionStatus();
+        showToast('success', 'Back Online', 'Syncing queued scans...');
+        processOfflineQueue();
+    });
+    
+    window.addEventListener('offline', () => {
+        updateConnectionStatus();
+        showToast('warning', 'Offline', 'Scans will be queued');
+    });
+    
+    // Handle page visibility
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && navigator.onLine) {
+            fetchStats();
+            fetchRecentScans();
+            processOfflineQueue();
+        }
+    });
+    
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.more-rooms')) {
+            elements.moreRoomsDropdown.classList.remove('show');
+        }
+    });
+}
+
+// ============================================
+// EXPORT FOR DEBUGGING
+// ============================================
+window.AttendanceApp = {
+    state,
+    config: CONFIG,
+    startScanner,
+    stopScanner,
+    processAttendance,
+    fetchStats,
+    fetchRecentScans
+};
