@@ -2,220 +2,59 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#667eea">
-    <meta name="mobile-web-app-capable" content="yes">
-    <title>📱 Attendance Scanner</title>
-    
-    <!-- Html5-QRCode Library -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Attendance Scanner</title>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-    
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    
-    <!-- Font Awesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Theme Toggle -->
-    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
-        <i class="fas fa-moon"></i>
-    </button>
-
-    <!-- Main Container -->
-    <div class="container">
+    <div class="app">
         <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <div class="logo">
-                    <div class="logo-icon">
-                        <i class="fas fa-qrcode"></i>
-                    </div>
-                    <div class="logo-text">
-                        <h1>Attendance Scanner</h1>
-                        <p>Quick & Easy Check-in</p>
-                    </div>
-                </div>
-                <div class="header-stats">
-                    <div class="stat-badge" id="todayCount">
-                        <i class="fas fa-users"></i>
-                        <span>0</span>
-                    </div>
-                </div>
-            </div>
+        <header>
+            <h1>📱 Attendance</h1>
+            <div class="status" id="status">● Online</div>
         </header>
 
-        <!-- Room Selector -->
-        <section class="room-selector">
-            <label class="room-label">
-                <i class="fas fa-door-open"></i>
-                Select Room
-            </label>
-            <div class="room-buttons" id="roomButtons">
-                <button class="room-btn active" data-room="Room A">
-                    <span class="room-letter">A</span>
-                    <span class="room-count">0</span>
-                </button>
-                <button class="room-btn" data-room="Room B">
-                    <span class="room-letter">B</span>
-                    <span class="room-count">0</span>
-                </button>
-                <button class="room-btn" data-room="Room C">
-                    <span class="room-letter">C</span>
-                    <span class="room-count">0</span>
-                </button>
-                <button class="room-btn" data-room="Room D">
-                    <span class="room-letter">D</span>
-                    <span class="room-count">0</span>
-                </button>
-            </div>
-        </section>
+        <!-- Room Selection -->
+        <div class="rooms">
+            <button class="room active" data-room="A">A</button>
+            <button class="room" data-room="B">B</button>
+            <button class="room" data-room="C">C</button>
+            <button class="room" data-room="D">D</button>
+        </div>
 
-        <!-- Scanner Section -->
-        <section class="scanner-section">
-            <div class="scanner-wrapper">
-                <!-- Scanner Container -->
-                <div class="scanner-container" id="scannerContainer">
-                    <div id="reader"></div>
-                    <div class="scanner-overlay" id="scannerOverlay">
-                        <div class="scan-region">
-                            <div class="corner corner-tl"></div>
-                            <div class="corner corner-tr"></div>
-                            <div class="corner corner-bl"></div>
-                            <div class="corner corner-br"></div>
-                            <div class="scan-line"></div>
-                        </div>
-                        <p class="scanner-hint">Point camera at QR code or barcode</p>
-                    </div>
-                    <div class="scanner-placeholder" id="scannerPlaceholder">
-                        <i class="fas fa-camera"></i>
-                        <p>Click "Start Scanner" to begin</p>
-                    </div>
-                </div>
-                
-                <!-- Scanner Controls -->
-                <div class="scanner-controls">
-                    <button class="control-btn primary" id="startBtn">
-                        <i class="fas fa-play"></i>
-                        Start Scanner
-                    </button>
-                    <button class="control-btn danger hidden" id="stopBtn">
-                        <i class="fas fa-stop"></i>
-                        Stop Scanner
-                    </button>
-                    <button class="control-btn secondary" id="switchCameraBtn" title="Switch Camera">
-                        <i class="fas fa-camera-rotate"></i>
-                    </button>
-                </div>
-            </div>
-        </section>
+        <!-- Scanner -->
+        <div class="scanner-box">
+            <div id="scanner"></div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+            <button id="startBtn" class="btn btn-start">▶ Start Camera</button>
+            <button id="stopBtn" class="btn btn-stop" style="display:none;">⬛ Stop</button>
+        </div>
 
         <!-- Manual Entry -->
-        <section class="manual-entry">
-            <div class="manual-entry-header" id="manualEntryToggle">
-                <i class="fas fa-keyboard"></i>
-                <span>Manual Entry</span>
-                <i class="fas fa-chevron-down toggle-icon"></i>
-            </div>
-            <div class="manual-entry-content" id="manualEntryContent">
-                <div class="input-group">
-                    <input type="text" id="manualCode" placeholder="Enter Student Code (e.g., 24B11CS433)" autocomplete="off" autocapitalize="characters">
-                    <button class="submit-btn" id="manualSubmit">
-                        <i class="fas fa-paper-plane"></i>
-                    </button>
-                </div>
-            </div>
-        </section>
+        <div class="manual">
+            <input type="text" id="codeInput" placeholder="Enter code manually...">
+            <button id="submitBtn">Submit</button>
+        </div>
 
-        <!-- Result Display -->
-        <section class="result-section hidden" id="resultSection">
-            <div class="result-card" id="resultCard">
-                <div class="result-icon">
-                    <i class="fas fa-check-circle"></i>
-                </div>
-                <div class="result-content">
-                    <h3 class="result-title">Success!</h3>
-                    <p class="result-message">Attendance recorded</p>
-                    <div class="result-details">
-                        <span class="student-code"></span>
-                        <span class="student-name"></span>
-                        <span class="scan-time"></span>
-                    </div>
-                </div>
-                <button class="result-close" id="closeResult">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-        </section>
+        <!-- Result -->
+        <div id="result" class="result"></div>
 
-        <!-- Recent Scans -->
-        <section class="recent-scans">
-            <div class="section-header">
-                <h2>
-                    <i class="fas fa-history"></i>
-                    Recent Scans
-                </h2>
-                <button class="refresh-btn" id="refreshRecent" title="Refresh">
-                    <i class="fas fa-sync-alt"></i>
-                </button>
-            </div>
-            <div class="scans-list" id="recentScansList">
-                <div class="empty-state">
-                    <i class="fas fa-inbox"></i>
-                    <p>No scans yet today</p>
-                </div>
-            </div>
-        </section>
+        <!-- Live Count -->
+        <div class="stats">
+            <span>Today: <strong id="count">0</strong></span>
+            <button id="refreshBtn">🔄</button>
+        </div>
 
-        <!-- Offline Queue -->
-        <section class="offline-queue hidden" id="offlineQueue">
-            <div class="queue-header">
-                <i class="fas fa-wifi-slash"></i>
-                <span>Offline Queue</span>
-                <span class="queue-count" id="queueCount">0</span>
-            </div>
-            <button class="retry-btn" id="retryQueue">
-                <i class="fas fa-redo"></i>
-                Retry All
-            </button>
-        </section>
-
-        <!-- Footer -->
-        <footer class="footer">
-            <a href="dashboard.html" class="dashboard-link">
-                <i class="fas fa-chart-bar"></i>
-                View Dashboard
-            </a>
-            <div class="connection-status online" id="connectionStatus">
-                <i class="fas fa-circle"></i>
-                <span>Online</span>
-            </div>
-        </footer>
-    </div>
-
-    <!-- Loading Overlay -->
-    <div class="loading-overlay hidden" id="loadingOverlay">
-        <div class="loading-spinner">
-            <div class="spinner"></div>
-            <p>Processing...</p>
+        <!-- Recent Scans (Live Sync) -->
+        <div class="recent">
+            <h3>Recent Scans (Live)</h3>
+            <div id="recentList"></div>
         </div>
     </div>
-
-    <!-- Toast Container -->
-    <div class="toast-container" id="toastContainer"></div>
-
-    <!-- Audio Elements -->
-    <audio id="successSound" preload="auto">
-        <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
-    </audio>
-    <audio id="errorSound" preload="auto">
-        <source src="https://assets.mixkit.co/active_storage/sfx/2955/2955-preview.mp3" type="audio/mpeg">
-    </audio>
-    <audio id="scanSound" preload="auto">
-        <source src="https://assets.mixkit.co/active_storage/sfx/1862/1862-preview.mp3" type="audio/mpeg">
-    </audio>
 
     <script src="script.js"></script>
 </body>
