@@ -201,6 +201,10 @@ function updateRoomSelection(room) {
 async function startScanner() {
     if (state.isScanning) return;
     
+    // Check camera permission first
+    const hasPermission = await requestCameraPermission();
+    if (!hasPermission) return;
+    
     try {
         state.scanner = new Html5Qrcode("reader");
         
@@ -208,10 +212,7 @@ async function startScanner() {
             fps: 10,
             qrbox: { width: 250, height: 250 },
             aspectRatio: 1.0,
-            disableFlip: false,
-            experimentalFeatures: {
-                useBarCodeDetectorIfSupported: true
-            }
+            disableFlip: false
         };
         
         await state.scanner.start(
@@ -224,14 +225,14 @@ async function startScanner() {
         state.isScanning = true;
         updateScannerUI(true);
         
-        console.log('📸 Scanner started');
+        console.log('📸 Scanner started successfully');
+        showToast('success', 'Scanner Ready', 'Point camera at QR code or barcode');
         
     } catch (error) {
-        console.error('Failed to start scanner:', error);
-        showToast('error', 'Camera Error', 'Failed to access camera. Please check permissions.');
+        console.error('❌ Failed to start scanner:', error);
+        showToast('error', 'Scanner Error', 'Failed to start camera: ' + error.message);
     }
 }
-
 async function stopScanner() {
     if (!state.isScanning || !state.scanner) return;
     
@@ -245,6 +246,25 @@ async function stopScanner() {
         
     } catch (error) {
         console.error('Failed to stop scanner:', error);
+    }
+}
+async function requestCameraPermission() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'environment' } 
+        });
+        stream.getTracks().forEach(track => track.stop());
+        return true;
+    } catch (error) {
+        console.error('Camera permission error:', error);
+        if (error.name === 'NotAllowedError') {
+            showToast('error', 'Camera Blocked', 'Please allow camera access in browser settings');
+        } else if (error.name === 'NotFoundError') {
+            showToast('error', 'No Camera', 'No camera found on this device');
+        } else {
+            showToast('error', 'Camera Error', error.message);
+        }
+        return false;
     }
 }
 
@@ -315,9 +335,10 @@ async function processAttendance(studentCode) {
             clientTimestamp: new Date().toISOString()
         };
         
+        console.log('📤 Sending to API:', payload);
+        
         // Check if online
         if (!navigator.onLine) {
-            // Add to offline queue
             addToOfflineQueue(payload);
             showResult('warning', 'Queued Offline', 'Will sync when online', {
                 studentCode: studentCode,
@@ -326,17 +347,29 @@ async function processAttendance(studentCode) {
             return;
         }
         
-        // Send to API
-        const response = await fetch(CONFIG.API_URL, {
-            method: 'POST',
-            mode: 'no-cors', // ← ADD THIS LINE
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
-        });
+        // Send to API with proper error handling
+        let response;
+        try {
+            response = await fetch(CONFIG.API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+        } catch (fetchError) {
+            console.error('❌ Fetch error:', fetchError);
+            throw new Error('Network error - check your internet connection');
+        }
+        
+        console.log('📥 Response status:', response.status);
+        
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+        }
         
         const result = await response.json();
+        console.log('📊 Result:', result);
         
         if (result.success) {
             // Success
@@ -366,11 +399,10 @@ async function processAttendance(studentCode) {
         }
         
     } catch (error) {
-        console.error('Error processing attendance:', error);
+        console.error('❌ Error processing attendance:', error);
         playSound('error');
         
         if (!navigator.onLine) {
-            // Add to offline queue
             addToOfflineQueue({
                 studentCode: studentCode,
                 room: state.currentRoom,
@@ -378,7 +410,7 @@ async function processAttendance(studentCode) {
             });
             showResult('warning', 'Queued Offline', 'Will sync when online', { studentCode });
         } else {
-            showResult('error', 'Error', error.message || 'Failed to process attendance');
+            showResult('error', 'Error', error.message || 'Failed to process attendance', { studentCode });
         }
         
     } finally {
@@ -386,7 +418,6 @@ async function processAttendance(studentCode) {
         showLoading(false);
     }
 }
-
 // ============================================
 // RESULT DISPLAY
 // ============================================
