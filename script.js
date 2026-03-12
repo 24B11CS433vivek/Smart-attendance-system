@@ -329,6 +329,7 @@ async function processAttendance(studentCode) {
         // Send to API
         const response = await fetch(CONFIG.API_URL, {
             method: 'POST',
+            mode: 'no-cors', // ← ADD THIS LINE
             headers: {
                 'Content-Type': 'application/json'
             },
