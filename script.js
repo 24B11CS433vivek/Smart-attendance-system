@@ -180,21 +180,20 @@ async function submitAttendance(code, room) {
   }
 
   try {
-    const res = await fetch(API_URL, {
-      method:  'POST',
-      headers: { 'Content-Type': 'text/plain' }, // Apps Script CORS workaround
-      body:    JSON.stringify(payload),
-    });
+    // Use no-cors mode with URL params as fallback
+    const url = API_URL
+      + "?code=" + encodeURIComponent(code)
+      + "&room=" + encodeURIComponent(room);
+
+    const res  = await fetch(url, { method: "GET" });
     const data = await res.json();
 
-    if (data.status === 'duplicate') {
-      // Backend says duplicate (edge case: another phone scanned simultaneously)
-      showToast('dup', '⚠', 'Duplicate (server)', `${code} already in sheet`);
+    if (data.status === "duplicate") {
+      showToast("dup", "⚠", "Duplicate (server)", code + " already in sheet");
     }
-    // success already handled optimistically
 
   } catch (err) {
-    console.warn('Network fail, queuing:', err);
+    console.warn("Network fail, queuing:", err);
     enqueueOffline(payload);
   }
 }
