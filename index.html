@@ -1,185 +1,235 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<meta name="theme-color" content="#0a0a0f" />
-<title>AttendX — Scan Attendance</title>
-<link rel="stylesheet" href="style.css" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>📱 Attendance Scanner</title>
+    
+    <!-- Html5-QRCode Library -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-<!-- ── FLASH OVERLAY ────────────────────────── -->
-<div id="flash-overlay"></div>
-
-<!-- ── RIPPLE CANVAS ────────────────────────── -->
-<canvas id="bg-canvas"></canvas>
-
-<!-- ═══════════════════════════════════════════ -->
-<!--  SCANNER PAGE                              -->
-<!-- ═══════════════════════════════════════════ -->
-<div id="page-scanner" class="page active">
-
-  <!-- HEADER -->
-  <header class="header">
-    <div class="header-left">
-      <div class="logo-mark">▣</div>
-      <div>
-        <div class="app-title">AttendX</div>
-        <div class="app-sub">Barcode Attendance</div>
-      </div>
-    </div>
-    <div class="header-right">
-      <button class="icon-btn" onclick="showPage('page-dashboard')" title="Dashboard">⊞</button>
-      <div class="status-dot" id="net-status" title="Network status"></div>
-    </div>
-  </header>
-
-  <!-- ROOM SELECTOR -->
-  <section class="room-section">
-    <div class="section-label">SCANNING ROOM</div>
-    <div class="room-pills" id="room-pills">
-      <button class="pill active" data-room="Room 1">Room 1</button>
-      <button class="pill" data-room="Room 2">Room 2</button>
-      <button class="pill" data-room="Room 3">Room 3</button>
-      <button class="pill" data-room="Room 4">Room 4</button>
-    </div>
-  </section>
-
-  <!-- SCANNER WINDOW -->
-  <section class="scanner-section">
-    <div class="scanner-frame" id="scanner-frame">
-      <div id="reader"></div>
-      <div class="scan-corners">
-        <span class="corner tl"></span><span class="corner tr"></span>
-        <span class="corner bl"></span><span class="corner br"></span>
-      </div>
-      <div class="scan-line" id="scan-line"></div>
-      <div class="scanner-idle" id="scanner-idle">
-        <div class="idle-icon">⬡</div>
-        <div class="idle-text">Press START to activate camera</div>
-      </div>
-    </div>
-
-    <!-- SCAN COUNTER BADGE -->
-    <div class="counter-badge">
-      <span id="scan-count">0</span>
-      <span class="counter-label"> scanned today</span>
-    </div>
-  </section>
-
-  <!-- CONTROLS -->
-  <section class="controls-section">
-    <button class="btn-start" id="btn-start" onclick="toggleScanner()">
-      <span class="btn-icon">◉</span>
-      <span id="btn-text">START SCANNING</span>
+    <!-- Theme Toggle -->
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <i class="fas fa-moon"></i>
     </button>
-  </section>
 
-  <!-- RESULT TOAST -->
-  <div class="result-toast" id="result-toast">
-    <div class="toast-icon" id="toast-icon">✓</div>
-    <div class="toast-content">
-      <div class="toast-title" id="toast-title">Success</div>
-      <div class="toast-detail" id="toast-detail">Student marked present</div>
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <i class="fas fa-qrcode"></i>
+                    </div>
+                    <div class="logo-text">
+                        <h1>Attendance Scanner</h1>
+                        <p>Quick & Easy Check-in</p>
+                    </div>
+                </div>
+                <div class="header-stats">
+                    <div class="stat-badge" id="todayCount">
+                        <i class="fas fa-users"></i>
+                        <span>0</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Room Selector -->
+        <section class="room-selector">
+            <label class="room-label">
+                <i class="fas fa-door-open"></i>
+                Select Room
+            </label>
+            <div class="room-buttons" id="roomButtons">
+                <button class="room-btn active" data-room="Room A">
+                    <span class="room-letter">A</span>
+                    <span class="room-count">0</span>
+                </button>
+                <button class="room-btn" data-room="Room B">
+                    <span class="room-letter">B</span>
+                    <span class="room-count">0</span>
+                </button>
+                <button class="room-btn" data-room="Room C">
+                    <span class="room-letter">C</span>
+                    <span class="room-count">0</span>
+                </button>
+                <button class="room-btn" data-room="Room D">
+                    <span class="room-letter">D</span>
+                    <span class="room-count">0</span>
+                </button>
+            </div>
+            <!-- More Rooms Dropdown -->
+            <div class="more-rooms">
+                <button class="more-rooms-btn" id="moreRoomsBtn">
+                    <i class="fas fa-plus"></i> More Rooms
+                </button>
+                <div class="more-rooms-dropdown" id="moreRoomsDropdown">
+                    <button class="room-btn-small" data-room="Room E">E</button>
+                    <button class="room-btn-small" data-room="Room F">F</button>
+                    <button class="room-btn-small" data-room="Room G">G</button>
+                    <button class="room-btn-small" data-room="Room H">H</button>
+                    <button class="room-btn-small" data-room="Room I">I</button>
+                    <button class="room-btn-small" data-room="Room J">J</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Scanner Section -->
+        <section class="scanner-section">
+            <div class="scanner-wrapper">
+                <!-- Scanner Container -->
+                <div class="scanner-container" id="scannerContainer">
+                    <div id="reader"></div>
+                    <div class="scanner-overlay">
+                        <div class="scan-region">
+                            <div class="corner corner-tl"></div>
+                            <div class="corner corner-tr"></div>
+                            <div class="corner corner-bl"></div>
+                            <div class="corner corner-br"></div>
+                            <div class="scan-line"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Scanner Controls -->
+                <div class="scanner-controls">
+                    <button class="control-btn" id="startBtn">
+                        <i class="fas fa-play"></i>
+                        Start Scanner
+                    </button>
+                    <button class="control-btn danger hidden" id="stopBtn">
+                        <i class="fas fa-stop"></i>
+                        Stop
+                    </button>
+                    <button class="control-btn secondary" id="switchCameraBtn">
+                        <i class="fas fa-camera-rotate"></i>
+                    </button>
+                    <button class="control-btn secondary" id="flashBtn">
+                        <i class="fas fa-bolt"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Manual Entry -->
+        <section class="manual-entry">
+            <div class="manual-entry-header" id="manualEntryToggle">
+                <i class="fas fa-keyboard"></i>
+                <span>Manual Entry</span>
+                <i class="fas fa-chevron-down toggle-icon"></i>
+            </div>
+            <div class="manual-entry-content" id="manualEntryContent">
+                <div class="input-group">
+                    <input type="text" id="manualCode" placeholder="Enter Student Code" autocomplete="off">
+                    <button class="submit-btn" id="manualSubmit">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Result Display -->
+        <section class="result-section hidden" id="resultSection">
+            <div class="result-card" id="resultCard">
+                <div class="result-icon">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="result-content">
+                    <h3 class="result-title">Success!</h3>
+                    <p class="result-message">Attendance recorded</p>
+                    <div class="result-details">
+                        <span class="student-code"></span>
+                        <span class="student-name"></span>
+                        <span class="scan-time"></span>
+                    </div>
+                </div>
+                <button class="result-close" id="closeResult">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </section>
+
+        <!-- Recent Scans -->
+        <section class="recent-scans">
+            <div class="section-header">
+                <h2>
+                    <i class="fas fa-history"></i>
+                    Recent Scans
+                </h2>
+                <button class="refresh-btn" id="refreshRecent">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            <div class="scans-list" id="recentScansList">
+                <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <p>No scans yet today</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Offline Queue -->
+        <section class="offline-queue hidden" id="offlineQueue">
+            <div class="queue-header">
+                <i class="fas fa-wifi-slash"></i>
+                <span>Offline Queue</span>
+                <span class="queue-count" id="queueCount">0</span>
+            </div>
+            <button class="retry-btn" id="retryQueue">
+                <i class="fas fa-redo"></i>
+                Retry All
+            </button>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <a href="dashboard.html" class="dashboard-link">
+                <i class="fas fa-chart-bar"></i>
+                View Dashboard
+            </a>
+            <div class="connection-status" id="connectionStatus">
+                <i class="fas fa-circle"></i>
+                <span>Online</span>
+            </div>
+        </footer>
     </div>
-  </div>
 
-  <!-- RECENT SCANS -->
-  <section class="recent-section">
-    <div class="section-label">
-      RECENT SCANS
-      <span class="queue-badge" id="queue-badge" style="display:none">● offline queue</span>
+    <!-- Loading Overlay -->
+    <div class="loading-overlay hidden" id="loadingOverlay">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p>Processing...</p>
+        </div>
     </div>
-    <ul class="scan-list" id="scan-list">
-      <li class="scan-empty">No scans yet — start scanning to see results</li>
-    </ul>
-  </section>
 
-</div><!-- /page-scanner -->
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
 
+    <!-- Audio Elements -->
+    <audio id="successSound" preload="auto">
+        <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="errorSound" preload="auto">
+        <source src="https://assets.mixkit.co/active_storage/sfx/2955/2955-preview.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="scanSound" preload="auto">
+        <source src="https://assets.mixkit.co/active_storage/sfx/1862/1862-preview.mp3" type="audio/mpeg">
+    </audio>
 
-<!-- ═══════════════════════════════════════════ -->
-<!--  DASHBOARD PAGE                            -->
-<!-- ═══════════════════════════════════════════ -->
-<div id="page-dashboard" class="page">
-
-  <header class="header">
-    <div class="header-left">
-      <button class="icon-btn" onclick="showPage('page-scanner')">←</button>
-      <div>
-        <div class="app-title">Dashboard</div>
-        <div class="app-sub" id="dash-date">Loading…</div>
-      </div>
-    </div>
-    <div class="header-right">
-      <button class="icon-btn" onclick="loadDashboard()" title="Refresh">↻</button>
-    </div>
-  </header>
-
-  <!-- TOTAL -->
-  <section class="dash-hero">
-    <div class="dash-total-label">TOTAL PRESENT TODAY</div>
-    <div class="dash-total" id="dash-total">—</div>
-    <div class="dash-progress-wrap">
-      <div class="dash-progress-bar" id="dash-progress" style="width:0%"></div>
-    </div>
-    <div class="dash-cap-label">out of ~400 students</div>
-  </section>
-
-  <!-- ROOM CARDS -->
-  <section class="room-cards-section">
-    <div class="section-label">ROOM BREAKDOWN</div>
-    <div class="room-cards" id="room-cards">
-      <div class="room-card skeleton"></div>
-      <div class="room-card skeleton"></div>
-      <div class="room-card skeleton"></div>
-      <div class="room-card skeleton"></div>
-    </div>
-  </section>
-
-  <!-- RECENT TABLE -->
-  <section class="recent-section">
-    <div class="section-label">LATEST SCANS</div>
-    <div class="dash-table-wrap">
-      <table class="dash-table" id="dash-table">
-        <thead><tr><th>Code</th><th>Room</th><th>Time</th></tr></thead>
-        <tbody id="dash-tbody">
-          <tr><td colspan="3" class="loading-cell">Loading…</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-</div><!-- /page-dashboard -->
-
-<!-- ═══════════════════════════════════════════ -->
-<!--  CONFIG MODAL                              -->
-<!-- ═══════════════════════════════════════════ -->
-<div class="modal-overlay" id="config-modal">
-  <div class="modal">
-    <div class="modal-title">⚙ Setup API</div>
-    <div class="modal-body">
-      <label class="field-label">Google Apps Script URL</label>
-      <input type="url" id="api-url-input" class="field-input"
-             placeholder="https://script.google.com/macros/s/…/exec" />
-      <div class="field-hint">Paste your deployed Web App URL here once.</div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn-secondary" onclick="closeConfig()">Cancel</button>
-      <button class="btn-primary" onclick="saveConfig()">Save & Continue</button>
-    </div>
-  </div>
-</div>
-
-<!-- AUDIO -->
-<audio id="snd-success" preload="auto">
-  <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAA..." />
-</audio>
-
-<script src="script.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
