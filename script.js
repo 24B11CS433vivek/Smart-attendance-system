@@ -9,7 +9,7 @@
 // CONFIGURATION - YOUR API URL HERE
 // ============================================
 const CONFIG = {
-    API_URL: 'https://script.google.com/macros/s/AKfycbym74lkksn7h8VktgkhVGNRQr__Zn3Ac86lHoXsL7hpH9gbGokw1UNDYySB-1JQcWGKNQ/exec',
+    API_URL: 'https://script.google.com/macros/s/AKfycbwYXx5ZoJdRmk1XmZKpjx5kk8QZZXvoeEYR_HAM7Ntwl0Ff-OGgAac9FHHLfv3noENZ8A/exec',
     SCAN_DELAY: 2000,
     AUTO_CLOSE_RESULT: 3000,
     STORAGE_KEYS: {
