@@ -9,49 +9,45 @@
 </head>
 <body>
     <div class="app">
-        <!-- Header -->
         <header>
             <h1>📱 Attendance</h1>
-            <div class="status" id="status">● Online</div>
+            <span id="status" class="online">● Online</span>
         </header>
 
-        <!-- Room Selection -->
-        <div class="rooms">
-            <button class="room active" data-room="A">A</button>
-            <button class="room" data-room="B">B</button>
-            <button class="room" data-room="C">C</button>
-            <button class="room" data-room="D">D</button>
+        <div class="rooms" id="rooms">
+            <button class="room active" data-room="Room A">A</button>
+            <button class="room" data-room="Room B">B</button>
+            <button class="room" data-room="Room C">C</button>
+            <button class="room" data-room="Room D">D</button>
         </div>
 
-        <!-- Scanner -->
         <div class="scanner-box">
             <div id="scanner"></div>
+            <div id="placeholder" class="placeholder">
+                <span>📷</span>
+                <p>Click Start to open camera</p>
+            </div>
         </div>
 
-        <!-- Controls -->
-        <div class="controls">
-            <button id="startBtn" class="btn btn-start">▶ Start Camera</button>
-            <button id="stopBtn" class="btn btn-stop" style="display:none;">⬛ Stop</button>
+        <div class="buttons">
+            <button id="startBtn" class="btn green">▶ Start Camera</button>
+            <button id="stopBtn" class="btn red" style="display:none">⏹ Stop</button>
         </div>
 
-        <!-- Manual Entry -->
-        <div class="manual">
-            <input type="text" id="codeInput" placeholder="Enter code manually...">
-            <button id="submitBtn">Submit</button>
+        <div class="manual-box">
+            <input type="text" id="manualInput" placeholder="Type student code...">
+            <button id="manualBtn" class="btn blue">Submit</button>
         </div>
 
-        <!-- Result -->
-        <div id="result" class="result"></div>
+        <div id="message" class="message"></div>
 
-        <!-- Live Count -->
-        <div class="stats">
-            <span>Today: <strong id="count">0</strong></span>
-            <button id="refreshBtn">🔄</button>
+        <div class="stats-box">
+            <div>Today: <strong id="totalCount">0</strong></div>
+            <button id="refreshBtn" class="btn-small">🔄 Refresh</button>
         </div>
 
-        <!-- Recent Scans (Live Sync) -->
-        <div class="recent">
-            <h3>Recent Scans (Live)</h3>
+        <div class="recent-box">
+            <h3>📋 Live Scans</h3>
             <div id="recentList"></div>
         </div>
     </div>
