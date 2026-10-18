@@ -1,4 +1,39 @@
-# AttendX — Free Mobile Barcode/QR Attendance System
+# AttendX: Free Mobile Barcode/QR Attendance System
+
+Scan student barcodes or QR codes with any phone browser and log attendance straight into Google Sheets. No app to install, no server to run, and no cost. Built for scanning large batches of students across multiple rooms.
+
+**Live demo:** https://peaceful-liger-63b1e4.netlify.app
+
+![Scanner](docs/index.png)
+
+## Features
+
+- **Phone-based scanning:** barcode and QR codes read through the phone camera in the browser
+- **Multi-room support:** each phone is set to a room, and every scan is recorded with the room
+- **Two-layer duplicate protection:** an instant check on the phone, plus a server-side check against the sheet
+- **Offline queue:** scans made without internet are stored and retried automatically every 30 seconds
+- **Live dashboard:** total present today, progress bar, per-room breakdown, and the last 20 scans
+- **Google Sheets backend:** data stays in your own sheet through a Google Apps Script web app
+- **Zero cost:** Google Sheets, Apps Script, and static hosting are all free
+
+## Screenshots
+
+| Scanner home | Barcode scan |
+|---|---|
+| ![Scanner home](docs/index.png) | ![Barcode scan](docs/barscan.png) |
+
+| Live dashboard | Admin view |
+|---|---|
+| ![Live dashboard](docs/live.png) | ![Admin view](docs/admin.png) |
+
+## Tech stack
+
+HTML5 · CSS3 · Vanilla JavaScript · Html5-QRCode · Google Apps Script · Google Sheets · Netlify / GitHub Pages
+
+---
+
+## Setup guide
+
 
 ## System Architecture
 
@@ -42,7 +77,7 @@ Sheet name: **Attendance**
 
 1. In your Google Sheet, click **Extensions → Apps Script**
 2. Delete all default code in the editor
-3. Open `apps-script.gs` from this project folder
+3. Open `Apps scripts.gs` from this project folder
 4. Paste the entire contents into the Apps Script editor
 5. On line 7, paste your Sheet ID:
    ```js
@@ -174,11 +209,15 @@ Use student roll numbers as the text content.
 ## File Structure
 
 ```
-attendance-system/
-├── index.html       ← Scanner UI + Dashboard (single page)
-├── style.css        ← All styles (dark theme, animations)
-├── script.js        ← Scanner logic, API calls, offline queue
-└── apps-script.gs   ← Paste into Google Apps Script (not uploaded to GitHub)
+Smart-attendance-system/
+├── index.html        ← Scanner UI
+├── style.css         ← All styles (dark theme, animations)
+├── script.js         ← Scanner logic, API calls, offline queue
+├── dashboard.html    ← Live dashboard page
+├── dashboard.js      ← Dashboard logic (totals, per-room stats, recent scans)
+├── Apps scripts.gs   ← Paste into Google Apps Script (backend API)
+├── docs/             ← README screenshots
+└── readme.md
 ```
 
 ---
